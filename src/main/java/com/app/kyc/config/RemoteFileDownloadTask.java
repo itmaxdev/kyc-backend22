@@ -1,10 +1,10 @@
-package com.kyc.config;
+package com.app.kyc.config;
 
 
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
-import com.kyc.service.FileProcessingService;
+import com.app.kyc.service.FileProcessingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;

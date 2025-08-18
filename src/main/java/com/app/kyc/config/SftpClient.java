@@ -1,7 +1,7 @@
-package com.kyc.config;
+package com.app.kyc.config;
 
 import com.jcraft.jsch.*;
-import com.kyc.model.RemoteFile;
+import com.app.kyc.model.RemoteFile;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;

@@ -1,7 +1,7 @@
-package com.kyc.config;
+package com.app.kyc.config;
 
-import com.kyc.service.FileProcessingService;
-import com.kyc.service.KycFileProcessor;
+import com.app.kyc.service.FileProcessingService;
+import com.app.kyc.service.KycFileProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;

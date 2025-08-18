@@ -1,10 +1,10 @@
-package com.kyc.config;
+package com.app.kyc.config;
 
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
-import com.kyc.entity.Registration;
-import com.kyc.repository.RegistrationRepository;
+import com.app.kyc.entity.Registration;
+import com.app.kyc.repository.RegistrationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;

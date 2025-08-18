@@ -60,15 +60,15 @@ public class DashboardController
 
    @GetMapping("/get-v2")
    public ResponseEntity<?> getDashboardV2(HttpServletRequest request, @RequestParam("filter") String filter) throws JsonProcessingException, NullPointerException {
-         if(securityHelper.hasRole(request, Collections.singletonList("Compliance Admin")))
-         {
+//         if(securityHelper.hasRole(request, Collections.singletonList("Compliance Admin")))
+//         {
             ObjectMapper mapper = new ObjectMapper();
             DashboardRequestDTO dashboardRequestDTO = mapper.readValue(filter, DashboardRequestDTO.class);
             DashboardResponseDTO dashboardResponse = dashboardService.getDashboardV2(dashboardRequestDTO);
             return ResponseEntity.ok(dashboardResponse);
-         }
+//         }
 
-            return ResponseEntity.ok("Not authorized");
+//            return ResponseEntity.ok("Not authorized");
       }
    
 

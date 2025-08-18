@@ -1,9 +1,9 @@
-package com.kyc.service;
+package com.app.kyc.service;
 
-import com.kyc.entity.ProcessedFile;
-import com.kyc.entity.Registration;
-import com.kyc.repository.ProcessedFileRepository;
-import com.kyc.repository.RegistrationRepository;
+import com.app.kyc.entity.ProcessedFile;
+import com.app.kyc.entity.Registration;
+import com.app.kyc.repository.ProcessedFileRepository;
+import com.app.kyc.repository.RegistrationRepository;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvValidationException;
 import org.springframework.beans.factory.annotation.Autowired;
