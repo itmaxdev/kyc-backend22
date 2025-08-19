@@ -1,4 +1,4 @@
-package com.kyc.config;
+package com.app.kyc.config;
 
 import com.jcraft.jsch.*;
 import com.app.kyc.service.FileProcessingService;

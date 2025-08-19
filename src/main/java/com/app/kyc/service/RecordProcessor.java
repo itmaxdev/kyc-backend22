@@ -1,4 +1,4 @@
-package com.kyc.service;
+package com.app.kyc.service;
 
 import org.springframework.stereotype.Service;
 
