@@ -1,7 +1,5 @@
 package com.app.kyc.service;
 
-import com.app.kyc.entity.ProcessedFile;
-import com.app.kyc.repository.ProcessedFileRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 

@@ -6,7 +6,6 @@ import com.jcraft.jsch.Session;
 import com.app.kyc.entity.Registration;
 import com.app.kyc.repository.RegistrationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
