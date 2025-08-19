@@ -1,4 +1,4 @@
-package com.kyc.service;
+package com.app.kyc.service;
 
 import com.app.kyc.config.SftpClient;
 import com.app.kyc.model.RemoteFile;

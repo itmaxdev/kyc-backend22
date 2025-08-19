@@ -1,10 +1,11 @@
 package com.app.kyc.service;
 
-import  com.app.kyc.entity.ProcessedFileEntity;
-import  com.app.kyc.repository.ProcessedFileEntityRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.app.kyc.entity.ProcessedFileEntity;
+import com.app.kyc.repository.ProcessedFileEntityRepository;
 
 import java.io.BufferedReader;
 import java.io.IOException;
