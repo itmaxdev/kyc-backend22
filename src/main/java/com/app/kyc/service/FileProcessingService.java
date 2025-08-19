@@ -1,11 +1,11 @@
-package com.kyc.service;
+package com.app.kyc.service;
 
-import com.kyc.entity.ProcessedFile;
-import com.kyc.entity.Registration;
-import com.kyc.repository.ProcessedFileRepository;
-import com.kyc.repository.RegistrationRepository;
+import com.app.kyc.entity.ProcessedFile;
+import com.app.kyc.entity.Registration;
+import com.app.kyc.repository.ProcessedFileRepository;
+import com.app.kyc.repository.RegistrationRepository;
 import com.opencsv.CSVReader;
-import com.opencsv.exceptions.CsvValidationException;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -27,7 +27,7 @@ public class FileProcessingService {
 
     private final int batchSize = 100;
 
-    public void processFile(Path filePath) {
+    public void processFile(Path filePath) throws IOException {
         if (Files.notExists(filePath)) {
             System.out.println("⛔ File does not exist: " + filePath);
             return;
@@ -85,10 +85,9 @@ public class FileProcessingService {
             fileLog.setStatus(FileStatus.COMPLETE);
             fileLog.setCompletedAt(LocalDateTime.now());
 
-        } catch (IOException | CsvValidationException e) {
+        } catch (IOException exception) {
             fileLog.setStatus(FileStatus.FAILED);
-            fileLog.setLastError(e.getMessage());
-            System.err.println("❌ Error processing file: " + e.getMessage());
+
         } finally {
             fileLog.setLastUpdated(LocalDateTime.now());
             processedFileRepository.save(fileLog);

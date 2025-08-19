@@ -1,7 +1,7 @@
 package com.kyc.service;
 
-import com.kyc.config.SftpClient;
-import com.kyc.model.RemoteFile;
+import com.app.kyc.config.SftpClient;
+import com.app.kyc.model.RemoteFile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
