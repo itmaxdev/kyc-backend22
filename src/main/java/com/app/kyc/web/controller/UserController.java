@@ -68,6 +68,7 @@ public class UserController
          roles.add("SP Admin");
          roles.add("Compliance Admin");
          roles.add("SP User");
+         roles.add("VODACOM User");
          if(securityHelper.hasRole(request, roles))
             return ResponseEntity.ok(userService.getUserById(id));
          else
