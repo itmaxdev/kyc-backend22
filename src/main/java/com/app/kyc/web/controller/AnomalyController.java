@@ -1,7 +1,5 @@
 package com.app.kyc.web.controller;
 
-import java.net.Authenticator;
-import java.security.Principal;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
