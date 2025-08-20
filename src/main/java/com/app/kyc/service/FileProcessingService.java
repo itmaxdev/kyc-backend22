@@ -1,9 +1,9 @@
 package com.app.kyc.service;
 
+import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ProcessedFile;
-import com.app.kyc.entity.Registration;
+import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
-import com.app.kyc.repository.RegistrationRepository;
 import com.opencsv.CSVReader;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +23,7 @@ public class FileProcessingService {
     private ProcessedFileRepository processedFileRepository;
 
     @Autowired
-    private RegistrationRepository registrationRepository;
+    private ConsumerRepository registrationRepository;
 
     private final int batchSize = 100;
 
@@ -40,7 +40,7 @@ public class FileProcessingService {
         fileLog.setRecordsProcessed(0);
         processedFileRepository.save(fileLog);
 
-        List<Registration> batch = new ArrayList<>();
+        List<Consumer> batch = new ArrayList<>();
         int totalProcessed = 0;
 
         try (
@@ -62,7 +62,7 @@ public class FileProcessingService {
                     continue;
                 }
 
-                Registration reg = mapRowToRegistration(row);
+                Consumer reg = mapRowToRegistration(row);
                 if (reg != null) {
                     batch.add(reg);
                 }
@@ -104,27 +104,27 @@ public class FileProcessingService {
         }
     }
 
-    private Registration mapRowToRegistration(String[] fields) {
+    private Consumer mapRowToRegistration(String[] fields) {
         if (fields == null || fields.length < 17) {
             System.out.println("⚠️ Skipping invalid row (null or too short): " + Arrays.toString(fields));
             return null;
         }
 
         try {
-            Registration reg = new Registration();
+            Consumer reg = new Consumer();
             reg.setMsisdn(fields[0].trim());
-            reg.setRegDate(fields[1].trim());
+            reg.setRegistrationDate(fields[1].trim());
             reg.setFirstName(fields[2].trim());
             reg.setMiddleName(fields[3].trim());
             reg.setLastName(fields[4].trim());
             reg.setGender(fields[5].trim());
-            reg.setDob(fields[6].trim());
-            reg.setPlaceOfBirth(fields[7].trim());
+            reg.setBirthDate(fields[6].trim());
+            reg.setBirthPlace(fields[7].trim());
             reg.setAddress(fields[8].trim());
-            reg.setMsisdn1(fields[13].trim());  // Column 14
-            reg.setMsisdn2(fields[14].trim());  // Column 15
-            reg.setCardType(fields[15].trim()); // Column 16
-            reg.setCardId(fields[16].trim());   // Column 17
+            reg.setAlternateMsisdn1(fields[13].trim());  // Column 14
+            reg.setAlternateMsisdn2(fields[14].trim());  // Column 15
+            reg.setIdentificationType(fields[15].trim()); // Column 16
+            reg.setIdentificationNumber(fields[16].trim());   // Column 17
             return reg;
         } catch (Exception e) {
             System.out.println("❌ Error mapping row: " + Arrays.toString(fields) + " - " + e.getMessage());

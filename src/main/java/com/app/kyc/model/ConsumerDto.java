@@ -19,12 +19,12 @@ public class ConsumerDto {
     List<AnomlyDto> anomlies=new ArrayList<AnomlyDto>();
     private Long id;
     private String msisdn;
-    private Date registrationDate;
+    private String registrationDate;
     private String firstName;
     private String middleName;
     private String lastName;
     private String gender;
-    private Date birthDate;
+    private String birthDate;
     private String birthPlace;
     private String address;
     private String alternateMsisdn1;

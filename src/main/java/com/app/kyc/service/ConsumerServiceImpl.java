@@ -515,7 +515,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                         tempConsumer.setBirthPlace(line.get(6));
                     }
                     if(!line.get(7).equals("") && !line.get(7).equals("\\N")){
-                        tempConsumer.setBirthDate(date);
+                        tempConsumer.setBirthDate(String.valueOf(date));
                     }
                     else{
                         tempConsumer.setBirthDate(null);
@@ -555,7 +555,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     tempConsumer.setCreatedOn(currentDate);
                     tempConsumer.setIsConsistent(true);
                     if (!line.get(17).equals("") && !line.get(17).equals("\\N")) {
-                        tempConsumer.setRegistrationDate(registrationDate);
+                        tempConsumer.setRegistrationDate(String.valueOf(registrationDate));
                     }
                     if (!line.get(18).equals("") && !line.get(18).equals("\\N")) {
                         tempConsumer.setIdentityCapturePath(line.get(18));
@@ -664,7 +664,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 }
 
                 if(!line.get(5).equals("") && !line.get(5).equals("\\N")){
-                    tempConsumer.setBirthDate(date);
+                    tempConsumer.setBirthDate(String.valueOf(date));
                 }
                 else{
                     tempConsumer.setBirthDate(null);
@@ -708,7 +708,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if (!line.get(18).equals("") && !line.get(18).equals("")) {
                         DateFormat sourseFormat = new SimpleDateFormat("E MMM dd HH:mm:ss zzz yyyy");
                         date = sourseFormat.parse(line.get(18));
-                        tempConsumer.setRegistrationDate(date);
+                        tempConsumer.setRegistrationDate(String.valueOf(date));
                     }
                 }
                 catch(Exception e){
@@ -803,7 +803,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     }
                     Consumer tempConsumer = new Consumer();
                     tempConsumer.setMsisdn(line.get(0));
-                    tempConsumer.setRegistrationDate(registrationDate);
+                    tempConsumer.setRegistrationDate(String.valueOf(registrationDate));
                     tempConsumer.setFirstName(line.get(5));
                     tempConsumer.setLastName(line.get(6));
                     
@@ -832,7 +832,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if(!line.get(12).equals("") && !line.get(12).equals("\\N")){
                         DateFormat sourseFormat = new SimpleDateFormat("yyyyMMdd");
                         Date date = sourseFormat.parse(line.get(12));
-                        tempConsumer.setBirthDate(date);
+                        tempConsumer.setBirthDate(String.valueOf(date));
                     }
                     else{
                         tempConsumer.setBirthDate(null);
@@ -840,7 +840,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if(!line.get(3).equals("START_DATE") && !line.get(3).equals("") && !line.get(12).equals("\\N")){
                         DateFormat sourseFormat = new SimpleDateFormat("E MMM dd HH:mm:ss zzz yyyy");
                         Date date = sourseFormat.parse(line.get(3));
-                        tempConsumer.setRegistrationDate(date);
+                        tempConsumer.setRegistrationDate(String.valueOf(date));
                     }
                     else{
                         tempConsumer.setRegistrationDate(null);
@@ -956,7 +956,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                         tempConsumer.setBirthDate(null);
                     }else {
                         Date birthDate = new SimpleDateFormat("dd-MMM-yy HH.mm.ss.SSSSSS a").parse(line.get(13));
-                        tempConsumer.setBirthDate(birthDate);
+                        tempConsumer.setBirthDate(String.valueOf(birthDate));
                     }
                 } catch (ParseException e) {
                     e.printStackTrace();
@@ -968,7 +968,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 try {
                     if (!line.get(17).equals("\\N") && !line.get(17).equals("")){
                         registrationDate = new SimpleDateFormat("dd-MMM-yy HH.mm.ss.SSSSSS a").parse(line.get(17));
-                        tempConsumer.setRegistrationDate(registrationDate);
+                        tempConsumer.setRegistrationDate(String.valueOf(registrationDate));
                         
                     }
                 } catch (Exception e) {
@@ -1074,7 +1074,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                         tempConsumer.setBirthPlace(line.get(6));
                     }
                     if(!line.get(7).equals("") && !line.get(7).equals("\\N")){
-                        tempConsumer.setBirthDate(date);
+                        tempConsumer.setBirthDate(String.valueOf(date));
                     }
                     else{
                         tempConsumer.setBirthDate(null);
