@@ -1,6 +1,5 @@
 package com.app.kyc.config;
 
-
 import com.app.kyc.service.FileProcessingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Locale;
 
 @Component
 public class FileProcessingTask {
@@ -31,8 +31,9 @@ public class FileProcessingTask {
                 System.out.println("📂 Looking for file: " + filePath);
 
                 if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
-                    System.out.println("✅ Found file: " + filePath);
-                    fileProcessingService.processFile(filePath);
+                    String operator = detectOperator(filePath.getFileName().toString());
+                    System.out.println("✅ Found file: " + filePath + " | Operator: " + operator);
+                    fileProcessingService.processFile(filePath, operator); // pass operator
                 } else {
                     System.out.println("⛔ File not found (or not a file): " + filePath);
                 }
@@ -44,6 +45,12 @@ public class FileProcessingTask {
         }
     }
 
-
-
+    // Map filename → operator (case-insensitive, supports “export_arptc” w/ or w/o extension)
+    private String detectOperator(String filename) {
+        String f = filename.toLowerCase(Locale.ROOT);
+        if (f.contains("kyc_sample_record_from_kyc_data_source_ok.csv")) return "Airtel";
+        if (f.contains("dump_echantillon_kyc.csv"))                     return "Orange";
+        if (f.contains("export_arptc"))                                  return "Vodacom"; // matches export_arptc or export_arptc.csv
+        return "Unknown";
+    }
 }

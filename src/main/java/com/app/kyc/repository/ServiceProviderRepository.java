@@ -2,6 +2,7 @@ package com.app.kyc.repository;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import com.app.kyc.model.DashboardObjectInterface;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -33,5 +34,5 @@ public interface ServiceProviderRepository extends JpaRepository<ServiceProvider
 
    @Query("select s.name from ServiceProvider s where s.id in (:ids)")
    List<String> findNamesByIds(@Param("ids") List<Long> ids);
-
+   Optional<ServiceProvider> findByNameIgnoreCase(String name);
 }

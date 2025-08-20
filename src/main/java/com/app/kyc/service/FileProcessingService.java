@@ -2,12 +2,19 @@ package com.app.kyc.service;
 
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ProcessedFile;
-import com.app.kyc.repository.ConsumerRepository;
+import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.repository.ProcessedFileRepository;
+import com.app.kyc.repository.ServiceProviderRepository;
 import com.opencsv.CSVReader;
-
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReaderBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.FileReader;
 import java.io.IOException;
@@ -19,117 +26,156 @@ import java.util.*;
 @Service
 public class FileProcessingService {
 
-    @Autowired
-    private ProcessedFileRepository processedFileRepository;
+    @Autowired private ProcessedFileRepository processedFileRepository;
+    @Autowired private ServiceProviderRepository serviceProviderRepository;
 
-    @Autowired
-    private ConsumerRepository registrationRepository;
+    @PersistenceContext
+    private EntityManager em;
 
-    private final int batchSize = 100;
+    // Keep batch size aligned with spring.jpa.properties.hibernate.jdbc.batch_size
+    @Value("${spring.jpa.properties.hibernate.jdbc.batch_size:500}")
+    private int batchSize;
 
-    public void processFile(Path filePath) throws IOException {
+    /**
+     * Fast path: one transaction, JDBC batching, flush/clear each batch.
+     */
+    @Transactional
+    public void processFile(Path filePath, String operator) throws IOException {
+        System.out.println("▶️ ENTER processFile: " + filePath + " | operator=" + operator);
+
         if (Files.notExists(filePath)) {
             System.out.println("⛔ File does not exist: " + filePath);
             return;
         }
 
+        long t0 = System.currentTimeMillis();
+        System.out.println("🔎 Looking up ServiceProvider…");
+        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+        System.out.println("🔗 ServiceProvider id=" + sp.getId() + ", name=" + sp.getName()
+                + " (" + (System.currentTimeMillis() - t0) + " ms)");
+
+        System.out.println("📝 Saving ProcessedFile (IN_PROGRESS) …");
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
         fileLog.setStatus(FileStatus.IN_PROGRESS);
         fileLog.setStartedAt(LocalDateTime.now());
         fileLog.setRecordsProcessed(0);
-        processedFileRepository.save(fileLog);
+        processedFileRepository.save(fileLog);  // <-- if logs stop here, it's DB connection
+        System.out.println("✅ ProcessedFile saved.");
 
-        List<Consumer> batch = new ArrayList<>();
+        System.out.println("📖 Opening CSV…");
+
         int totalProcessed = 0;
+        int totalSkipped = 0;
 
-        try (
-                FileReader fr = new FileReader(filePath.toFile());
-                CSVReader reader = new CSVReader(fr)
-        ) {
+        try (FileReader fr = new FileReader(filePath.toFile());
+             CSVReader reader = new CSVReaderBuilder(fr)
+                     .withCSVParser(new CSVParserBuilder().withSeparator(',').build())
+                     .build()) {
+
             String[] row;
             boolean isHeader = true;
 
             while ((row = reader.readNext()) != null) {
-                if (isHeader) {
-                    isHeader = false;
-                    continue;
-                }
+                if (isHeader) { isHeader = false; continue; }
 
-                // Skip empty or junk rows
-                if (row.length <= 1 || row[0].trim().isEmpty()) {
-                    System.out.println("⚠️ Skipping empty or malformed row: " + Arrays.toString(row));
+                // Skip empty / malformed
+                if (row.length <= 1 || row[0] == null || row[0].trim().isEmpty()) {
+                    totalSkipped++;
                     continue;
                 }
 
                 Consumer reg = mapRowToRegistration(row);
-                if (reg != null) {
-                    batch.add(reg);
+                if (reg == null) { totalSkipped++; continue; }
+
+                // Link operator per row
+                reg.setServiceProvider(sp);
+
+                // ⬅️ Upsert to tolerate duplicates on msisdn
+                em.merge(reg); // instead of em.persist(reg)
+                totalProcessed++;
+
+                // Flush/clear every batch to keep PC small and push batched statements
+                if (totalProcessed % batchSize == 0) {
+                    em.flush();
+                    em.clear();
+                    System.out.println("✅ Flushed " + totalProcessed + " records so far. Elapsed " +
+                            (System.currentTimeMillis() - t0) + " ms");
                 }
 
-                if (batch.size() >= batchSize) {
-                    registrationRepository.saveAll(batch);
-                    totalProcessed += batch.size();
-                    batch.clear();
-                    System.out.println("✅ Saved batch of " + batchSize + " records.");
+                // heartbeat every 5k
+                if (totalProcessed % 5000 == 0) {
+                    System.out.println("⏳ Progress: " + totalProcessed + " processed, " + totalSkipped + " skipped");
                 }
             }
 
-            if (!batch.isEmpty()) {
-                registrationRepository.saveAll(batch);
-                totalProcessed += batch.size();
-                System.out.println("✅ Saved final batch of " + batch.size() + " records.");
-            }
+            // final flush
+            em.flush();
+            em.clear();
 
             fileLog.setRecordsProcessed(totalProcessed);
             fileLog.setStatus(FileStatus.COMPLETE);
             fileLog.setCompletedAt(LocalDateTime.now());
-
-        } catch (IOException exception) {
-            fileLog.setStatus(FileStatus.FAILED);
-
-        } finally {
             fileLog.setLastUpdated(LocalDateTime.now());
             processedFileRepository.save(fileLog);
+
+            System.out.println("🎉 DONE: processed=" + totalProcessed + ", skipped=" + totalSkipped +
+                    " in " + (System.currentTimeMillis() - t0) + " ms");
+
+        } catch (Exception ex) {
+            // mark failed (still inside transaction; status will be persisted)
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError("Ingestion error: " + ex.getMessage());
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+            throw ex; // let Spring roll back the transaction
         }
 
-        // ⚠️ Move file AFTER closing readers
+        // Move AFTER DB work
         try {
             moveToProcessedFolder(filePath, fileLog);
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
         } catch (IOException e) {
             fileLog.setStatus(FileStatus.FAILED);
             fileLog.setLastError("Move failed: " + e.getMessage());
-            System.err.println("❌ Error moving file: " + e.getMessage());
+            fileLog.setLastUpdated(LocalDateTime.now());
             processedFileRepository.save(fileLog);
+            System.err.println("❌ Error moving file: " + e.getMessage());
         }
     }
 
+    /**
+     * Map CSV row → Consumer. Keep light. Parse/sanitize here if needed.
+     * NOTE: If DB columns are DATE/LocalDate, parse strings before setting.
+     */
     private Consumer mapRowToRegistration(String[] fields) {
-        if (fields == null || fields.length < 17) {
-            System.out.println("⚠️ Skipping invalid row (null or too short): " + Arrays.toString(fields));
-            return null;
-        }
+        if (fields == null || fields.length < 17) return null;
 
         try {
             Consumer reg = new Consumer();
-            reg.setMsisdn(fields[0].trim());
-            reg.setRegistrationDate(fields[1].trim());
-            reg.setFirstName(fields[2].trim());
-            reg.setMiddleName(fields[3].trim());
-            reg.setLastName(fields[4].trim());
-            reg.setGender(fields[5].trim());
-            reg.setBirthDate(fields[6].trim());
-            reg.setBirthPlace(fields[7].trim());
-            reg.setAddress(fields[8].trim());
-            reg.setAlternateMsisdn1(fields[13].trim());  // Column 14
-            reg.setAlternateMsisdn2(fields[14].trim());  // Column 15
-            reg.setIdentificationType(fields[15].trim()); // Column 16
-            reg.setIdentificationNumber(fields[16].trim());   // Column 17
+            reg.setMsisdn(safe(fields[0]));
+            reg.setRegistrationDate(safe(fields[1])); // parse to LocalDate if column is DATE
+            reg.setFirstName(safe(fields[2]));
+            reg.setMiddleName(safe(fields[3]));
+            reg.setLastName(safe(fields[4]));
+            reg.setGender(safe(fields[5]));
+            reg.setBirthDate(safe(fields[6]));        // parse if DATE in DB
+            reg.setBirthPlace(safe(fields[7]));
+            reg.setAddress(safe(fields[8]) + " " + safe(fields[9]) + " " + safe(fields[10]) + " " + safe(fields[11]) + " " + safe(fields[12]));
+            reg.setAlternateMsisdn1(safe(fields[13]));
+            reg.setAlternateMsisdn2(safe(fields[14]));
+            reg.setIdentificationType(safe(fields[15]));
+            reg.setIdentificationNumber(safe(fields[16]));
             return reg;
         } catch (Exception e) {
-            System.out.println("❌ Error mapping row: " + Arrays.toString(fields) + " - " + e.getMessage());
-            return null;
+            return null; // skip bad row
         }
+    }
+
+    private static String safe(String s) {
+        return (s == null) ? null : s.trim();
     }
 
     private void moveToProcessedFolder(Path filePath, ProcessedFile fileLog) throws IOException {
