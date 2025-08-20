@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface ProcessedFileRepository extends JpaRepository<ProcessedFile, UUID> {
     Optional<ProcessedFile> findByOperatorAndFilename(String operator, String filename);
+
 }

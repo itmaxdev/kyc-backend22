@@ -30,11 +30,11 @@ public class FileProcessingTask {
                 Path filePath = Paths.get(pathStr.trim());
                 System.out.println("📂 Looking for file: " + filePath);
 
-                if (Files.exists(filePath)) {
+                if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
                     System.out.println("✅ Found file: " + filePath);
                     fileProcessingService.processFile(filePath);
                 } else {
-                    System.out.println("⛔ File not found at: " + filePath);
+                    System.out.println("⛔ File not found (or not a file): " + filePath);
                 }
 
             } catch (Exception e) {
@@ -43,5 +43,7 @@ public class FileProcessingTask {
             }
         }
     }
+
+
 
 }
