@@ -28,6 +28,8 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
    Consumer findByIdAndConsumerStatus(long id, int consumerStatus);
    //   int countByServiceProviderIdAndCreatedOnGreaterThanAndCreatedOnLessThanEqual(Long serviceProviderId, Date start, Date end);
 
+
+
    @Query(value = "select * from consumers where consumer_status = :consumer_status and service_provider_id in (" + "select id from service_providers where industry_id = :industryId) " + "and created_on > :start and created_on <= :end", nativeQuery = true)
    List<Consumer> findAllConsumersByCreatedOnGreaterThanAndCreatedOnLessThanEqual(@Param("consumer_status")int consumer_status, Long industryId, Date start, Date end);
 

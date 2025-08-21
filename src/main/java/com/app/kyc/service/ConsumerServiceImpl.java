@@ -1141,7 +1141,8 @@ public class ConsumerServiceImpl implements ConsumerService {
         return null;
     }
 
-    private void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+    public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+       System.out.println("Inside check consumer");
         Set<Consumer> consumerSet = new HashSet<>();
         
         AnomalyCollection anomalyCollection=new AnomalyCollection();

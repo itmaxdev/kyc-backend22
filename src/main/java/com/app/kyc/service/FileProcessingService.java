@@ -3,8 +3,11 @@ package com.app.kyc.service;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ProcessedFile;
 import com.app.kyc.entity.ServiceProvider;
+import com.app.kyc.entity.User;
+import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
+import com.app.kyc.web.security.SecurityHelper;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReaderBuilder;
@@ -14,6 +17,8 @@ import org.springframework.stereotype.Service;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import javax.servlet.http.HttpServletRequest;
+
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.FileReader;
@@ -29,6 +34,17 @@ public class FileProcessingService {
     @Autowired private ProcessedFileRepository processedFileRepository;
     @Autowired private ServiceProviderRepository serviceProviderRepository;
 
+    @Autowired private ConsumerRepository consumerRepository;
+
+    @Autowired private ConsumerServiceImpl consumerServiceImpl;
+
+    @Autowired
+    UserService userService;
+
+    HttpServletRequest request;
+
+    @Autowired
+    SecurityHelper securityHelper;
     @PersistenceContext
     private EntityManager em;
 
@@ -52,6 +68,10 @@ public class FileProcessingService {
         System.out.println("🔎 Looking up ServiceProvider…");
         ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+
+        List<Consumer> consumerRepositoryAll = consumerRepository.findAll();
+        System.out.println("🔎 Looking up consumer size …"+consumerRepositoryAll.size());
+
         System.out.println("🔗 ServiceProvider id=" + sp.getId() + ", name=" + sp.getName()
                 + " (" + (System.currentTimeMillis() - t0) + " ms)");
 
@@ -119,6 +139,13 @@ public class FileProcessingService {
             fileLog.setCompletedAt(LocalDateTime.now());
             fileLog.setLastUpdated(LocalDateTime.now());
             processedFileRepository.save(fileLog);
+
+
+                User user = userService.getUserByEmail("cadmin@test.com");
+
+                consumerServiceImpl.checkConsumer(consumerRepositoryAll,user, sp);
+
+
 
             System.out.println("🎉 DONE: processed=" + totalProcessed + ", skipped=" + totalSkipped +
                     " in " + (System.currentTimeMillis() - t0) + " ms");
