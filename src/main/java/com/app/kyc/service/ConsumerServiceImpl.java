@@ -1742,9 +1742,6 @@ public class ConsumerServiceImpl implements ConsumerService {
         if (consumer.getGender() == null || consumer.getGender().equals("")) {
             nullAttributesOfFile.add("gender");
         }
-        if (consumer.getNationality() == null || consumer.getNationality().equals("")) {
-            nullAttributesOfFile.add("nationality");
-        }
         if (consumer.getBirthPlace() == null || consumer.getBirthPlace().equals("")) {
             nullAttributesOfFile.add("birthPlace");
         }
