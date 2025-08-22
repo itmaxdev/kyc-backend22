@@ -43,6 +43,12 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.persistence.EntityManager;
+import javax.persistence.FlushModeType;
+import javax.persistence.PersistenceContext;
 
 @Service
 @Slf4j
@@ -55,6 +61,9 @@ public class ConsumerServiceImpl implements ConsumerService {
     
     @Autowired
     AnomalyRepository anomalyRepository;
+
+    @PersistenceContext
+    EntityManager em;
     
     @Autowired
     AnomalyTypeRepository anomalyTypeRepository;
@@ -1141,7 +1150,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return null;
     }
 
-    public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+    /*public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
        System.out.println("Inside check consumer");
         Set<Consumer> consumerSet = new HashSet<>();
         
@@ -1209,8 +1218,153 @@ public class ConsumerServiceImpl implements ConsumerService {
             });
         }
         anomalyCollection.getParentAnomalyNoteSet().clear();
-    }
-    
+    }*/
+
+
+
+
+
+
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+            if (consumers == null || consumers.isEmpty()) {
+                log.info("checkConsumer start | operator={} consumers=0", serviceProvider.getName());
+                return;
+            }
+
+            long t0 = System.nanoTime();
+            log.info("checkConsumer start | operator={} consumers={}", serviceProvider.getName(), consumers.size());
+
+            // Prevent Hibernate from auto-flushing before every read query inside this tx.
+            try { em.setFlushMode(FlushModeType.COMMIT); } catch (Exception ignore) {}
+
+            // Reduce time spent waiting on locks (session scope).
+            try { em.createNativeQuery("SET SESSION innodb_lock_wait_timeout = 5").executeUpdate(); } catch (Exception ignore) {}
+
+            // Precompute once (was cheap but do it outside the loop anyway)
+            int existingCountForSp = consumerRepository.countByServiceProvider_Id(serviceProvider.getId());
+
+            // Duplicate detection on msisdn (your equals/hashCode are msisdn-based, but make it explicit + null-safe)
+            Set<String> seenMsisdn = new HashSet<>(consumers.size() * 2);
+
+            // For “Exceeding” anomaly counting key
+            Map<ExceedingConsumers, Integer> exceedMap = new HashMap<>();
+
+            // Buffer writes in batches to avoid per-row I/O
+            final int batchSize = 500; // keep <= hibernate.jdbc.batch_size
+            List<Consumer> pendingSaves = new ArrayList<>(batchSize);
+
+            // Optional helper your code uses
+            AnomalyCollection anomalyCollection = new AnomalyCollection();
+
+            int processed = 0;
+            for (Consumer consumer : consumers) {
+                long startOne = System.nanoTime();
+                try {
+                    // -------- Incomplete anomaly check --------
+                    consumer.setIsConsistent(Boolean.TRUE);
+                    List<String> errors = checkNullAttributesForFile(consumer); // your existing helper
+
+                    if (!errors.isEmpty()) {
+                        try {
+                            checkConsumerIncompleteAnomaly(consumer, errors, user, existingCountForSp != 0, anomalyCollection);
+                        } catch (Exception e) {
+                            log.warn("incomplete-anomaly failed msisdn={}", safeMsisdn(consumer), e);
+                        }
+                    } else {
+                        if (existingCountForSp != 0) {
+                            try { resolveIncompleteAnomaly(consumer, user); } catch (Exception e) { log.warn("resolveIncomplete failed msisdn={}", safeMsisdn(consumer), e); }
+                            try { softDeleteConsistentUsers(consumer); }   catch (Exception e) { log.warn("softDeleteConsistent failed msisdn={}", safeMsisdn(consumer), e); }
+                        }
+                        pendingSaves.add(consumer);
+                    }
+
+                    // -------- Duplicate anomaly check (by msisdn) --------
+                    String keyMsisdn = normalize(consumer.getMsisdn());
+                    if (!seenMsisdn.add(keyMsisdn)) {
+                        try { tagDuplicateAnomalies(consumer, user); } catch (Exception e) { log.warn("duplicate-anomaly failed msisdn={}", keyMsisdn, e); }
+                    } else {
+                        try {
+                            Consumer updated = resolvedAndSoftDeleteConsumers(consumer, existingCountForSp != 0, user);
+                            pendingSaves.add(updated);
+                        } catch (Exception e) {
+                            log.warn("resolve-old-anomalies failed msisdn={}", keyMsisdn, e);
+                        }
+                    }
+
+                    // -------- Exceeding anomaly check --------
+                    ExceedingConsumers exKey = new ExceedingConsumers();
+                    exKey.setServiceProviderName(serviceProvider.getName());
+                    exKey.setIdentificationType(Optional.ofNullable(consumer.getIdentificationType()).orElse(""));
+                    exKey.setIdentificationNumber(Optional.ofNullable(consumer.getIdentificationNumber()).orElse(""));
+                    int newCnt = exceedMap.merge(exKey, 1, Integer::sum);
+                    if (newCnt < 3) {
+                        try {
+                            Consumer updated = resolvedAndDeleteExceedingConsumers(consumer, existingCountForSp != 0, user);
+                            pendingSaves.add(updated);
+                        } catch (Exception e) {
+                            log.warn("resolve-exceeding failed msisdn={}", keyMsisdn, e);
+                        }
+                    } else if (newCnt == 3) { // first time crossing the threshold
+                        try { tagExceedingAnomalies(consumer, user); } catch (Exception e) { log.warn("exceeding-anomaly failed msisdn={}", keyMsisdn, e); }
+                    }
+
+                    // -------- Batch flush/clear --------
+                    processed++;
+                    if (pendingSaves.size() >= batchSize) {
+                        consumerRepository.saveAllAndFlush(pendingSaves);
+                        pendingSaves.clear();
+                        em.clear();
+                    }
+
+                    if (processed % 200 == 0) {
+                        long ms = (System.nanoTime() - t0) / 1_000_000;
+                        log.info("checkConsumer progress | processed={} elapsedMs={}", processed, ms);
+                    }
+                } catch (Exception ex) {
+                    log.error("checkConsumer error msisdn={} sp={} ", safeMsisdn(consumer), serviceProvider.getName(), ex);
+                } finally {
+                    long durMs = (System.nanoTime() - startOne) / 1_000_000;
+                    if (durMs > 1000) {
+                        log.warn("slow record msisdn={} took {} ms", safeMsisdn(consumer), durMs);
+                    }
+                }
+            }
+
+            // Final flush
+            if (!pendingSaves.isEmpty()) {
+                consumerRepository.saveAllAndFlush(pendingSaves);
+                pendingSaves.clear();
+                em.clear();
+            }
+
+            anomalyCollection.getParentAnomalyNoteSet().clear();
+
+            long totalMs = (System.nanoTime() - t0) / 1_000_000;
+            log.info("checkConsumer done | operator={} processed={} in {} ms", serviceProvider.getName(), processed, totalMs);
+        }
+
+        // ======== helpers (same assumptions as your code) ========
+
+        private String safeMsisdn(Consumer c) {
+            return c == null ? "null" : String.valueOf(c.getMsisdn());
+        }
+        private String normalize(String s) { return s == null ? "" : s.trim(); }
+
+        // Your existing methods referenced here must remain:
+        // - List<String> checkNullAttributesForFile(Consumer c)
+        // - void checkConsumerIncompleteAnomaly(Consumer c, List<String> errors, User user, boolean hasExisting, AnomalyCollection ac)
+        // - void resolveIncompleteAnomaly(Consumer c, User user)
+        // - void softDeleteConsistentUsers(Consumer c)
+        // - Consumer resolvedAndSoftDeleteConsumers(Consumer c, boolean hasExisting, User user)
+        // - void tagDuplicateAnomalies(Consumer c, User user)
+        // - Consumer resolvedAndDeleteExceedingConsumers(Consumer c, boolean hasExisting, User user)
+        // - void tagExceedingAnomalies(Consumer c, User user)
+
+
+
+
+
     private void checkConsumerIncompleteAnomaly(Consumer consumer, List<String> errors, User user, Boolean flag,AnomalyCollection collection) {
         
         Set<String> setForDefaultErrors = new HashSet<>();
