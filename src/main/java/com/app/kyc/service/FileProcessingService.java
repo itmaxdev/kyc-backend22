@@ -178,11 +178,13 @@ public class FileProcessingService {
      * NOTE: If DB columns are DATE/LocalDate, parse strings before setting.
      */
     private Consumer mapRowToRegistration(String[] fields) {
+        java.util.Date currentDate = new java.util.Date();
         if (fields == null || fields.length < 17) return null;
 
         try {
             Consumer reg = new Consumer();
             reg.setMsisdn(safe(fields[0]));
+            reg.setCreatedOn(currentDate);
             reg.setRegistrationDate(safe(fields[1])); // parse to LocalDate if column is DATE
             reg.setFirstName(safe(fields[2]));
             reg.setMiddleName(safe(fields[3]));

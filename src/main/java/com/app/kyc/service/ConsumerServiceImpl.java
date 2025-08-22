@@ -1726,14 +1726,24 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
         return errors;
     }
-    
+
+
     private List<String> checkNullAttributesForFile(Consumer consumer){
         List <String> nullAttributesOfFile = new ArrayList<>();
         if (consumer.getMsisdn() == null || consumer.getMsisdn().equals("")) {
             nullAttributesOfFile.add("MSSIDN");
         }
+
+        if (consumer.getRegistrationDate() == null || consumer.getRegistrationDate().equals("")) {
+            nullAttributesOfFile.add("Registration Date");
+        }
+
         if (consumer.getFirstName() == null || consumer.getFirstName().equals("")) {
             nullAttributesOfFile.add("firstName");
+        }
+
+        if (consumer.getMiddleName() == null || consumer.getMiddleName().equals("")) {
+            nullAttributesOfFile.add("middleName");
         }
         
         if (consumer.getLastName() == null || consumer.getLastName().equals("")) {
@@ -1742,43 +1752,38 @@ public class ConsumerServiceImpl implements ConsumerService {
         if (consumer.getGender() == null || consumer.getGender().equals("")) {
             nullAttributesOfFile.add("gender");
         }
+
         if (consumer.getBirthPlace() == null || consumer.getBirthPlace().equals("")) {
             nullAttributesOfFile.add("birthPlace");
         }
         if (consumer.getBirthDate() == null || consumer.getBirthDate().equals("")) {
             nullAttributesOfFile.add("birthday");
         }
-        if (consumer.getRegistrationDate() == null || consumer.getRegistrationDate().equals("")) {
-            nullAttributesOfFile.add("Registration Date");
-        }
-        
-        
-        if (consumer.getIdentificationNumber() == null || consumer.getIdentificationNumber().equals("")) {
-            nullAttributesOfFile.add("code");
-        }
-        if (consumer.getIdentificationType() == null || consumer.getIdentificationType().equals("")) {
-            nullAttributesOfFile.add("typePiece");
-        }
+
         if (consumer.getAddress() == null || consumer.getAddress().equals("")) {
             nullAttributesOfFile.add("address");
         }
-        if (consumer.getAddress() == null || consumer.getAddress().equals("")) {
-            nullAttributesOfFile.add("district");
+
+        if (consumer.getAlternateMsisdn1() == null || consumer.getAlternateMsisdn1().equals("")) {
+            nullAttributesOfFile.add("AlternateMsisdn1");
         }
-        if (consumer.getAddress() == null || consumer.getAddress().equals("")) {
-            nullAttributesOfFile.add("houseNumber");
+
+        if (consumer.getAlternateMsisdn2() == null || consumer.getAlternateMsisdn2().equals("")) {
+            nullAttributesOfFile.add("AlternateMsisdn2");
         }
-        if (consumer.getAddress() == null || consumer.getAddress().equals("")) {
-            nullAttributesOfFile.add("commune");
+        if (consumer.getIdentificationNumber() == null || consumer.getIdentificationNumber().equals("")) {
+            nullAttributesOfFile.add("IdentificationNumber");
         }
-        if (consumer.getAddress() == null || consumer.getAddress().equals("")) {
-            nullAttributesOfFile.add("province");
+        if (consumer.getIdentificationType() == null || consumer.getIdentificationType().equals("")) {
+            nullAttributesOfFile.add("identificationType");
         }
-        // if (consumer.getCreatedOn() == null || consumer.getCreatedOn().equals("")) {
-        //     nullAttributesOfFile.add("recievedDate");
-        // }
-        if (consumer.getIdentityCapturePath() == null || consumer.getIdentityCapturePath().equals("")) {
-            nullAttributesOfFile.add("fullPath");
+
+        if (consumer.getAddress() == null || consumer.getAddress().equals("")) {
+            nullAttributesOfFile.add("address");
+        }
+
+        if (consumer.getCreatedOn() == null || consumer.getCreatedOn().equals("")) {
+            nullAttributesOfFile.add("createdOn");
         }
         return nullAttributesOfFile;
         
