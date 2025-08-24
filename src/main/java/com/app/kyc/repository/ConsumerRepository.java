@@ -220,4 +220,12 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
 
     /** Quick existence check by business key. */
     boolean existsByMsisdn(String msisdn);
+
+    Page<Consumer> findAll(Pageable pageable);
+    // BAD
+    @Query("select c from Consumer c where c.isConsistent = true")
+    Page<Consumer> findByIsConsistentTrue(Pageable p, @Param("status") int status);
+
+    Page<Consumer> findByIsConsistentFalse(Pageable p, @Param("status") int status);
+
 }
