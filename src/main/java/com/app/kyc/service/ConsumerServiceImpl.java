@@ -98,8 +98,9 @@ public class ConsumerServiceImpl implements ConsumerService {
         Pagination pagination = PaginationUtil.getFilterObject(params);
         //3 checks, 1 is for whole filter object, 2nd is for filter consistent and 3rd check is for filter consistent value.
         // TODO enchance logic for consumerAnomaly
-        if (!Objects.isNull(pagination.getFilter()) && !Objects.isNull(pagination.getFilter().getConsistent()) && !pagination.getFilter().getConsistent()) {
-            Page<Consumer> consumerData =  consumerRepository.findByIsConsistentFalseAndConsumerStatus(PaginationUtil.getPageable(params), 0);
+        if (!Objects.isNull(pagination.getFilter()) && !Objects.isNull(pagination.getFilter().getConsistent())) {
+            System.out.println("test outcome here with out consistent");
+            Page<Consumer> consumerData =  consumerRepository.findByIsConsistentFalse(PaginationUtil.getPageable(params), 0);
             
             pageConsumers = consumerData
             .stream()
@@ -107,10 +108,12 @@ public class ConsumerServiceImpl implements ConsumerService {
             totalInConsistentCustomer = consumerData.getTotalElements();
             
         } else {
-            Page<Consumer> consumerData = consumerRepository.findByIsConsistentTrueAndConsumerStatus(PaginationUtil.getPageable(params), 0);
+        System.out.println("test outcome here with consistent ");
+            Page<Consumer> consumerData = consumerRepository.findByIsConsistentTrue(PaginationUtil.getPageable(params), 0);
             
             pageConsumers = consumerData.stream().map(c -> new ConsumerDto(c, c.getAnomalies())).collect(Collectors.toList());
             totalInConsistentCustomer = consumerData.getTotalElements();
+        System.out.println("test outcome here "+totalInConsistentCustomer.toString());
         }
         pageConsumers.forEach(consumerDto -> {
             if(Objects.isNull(consumerDto.getLastName()))
