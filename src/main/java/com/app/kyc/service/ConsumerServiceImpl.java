@@ -16,6 +16,8 @@ import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
 import org.apache.poi.xssf.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.app.kyc.entity.Anomaly;
@@ -43,6 +45,12 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.persistence.EntityManager;
+import javax.persistence.FlushModeType;
+import javax.persistence.PersistenceContext;
 
 @Service
 @Slf4j
@@ -55,6 +63,9 @@ public class ConsumerServiceImpl implements ConsumerService {
     
     @Autowired
     AnomalyRepository anomalyRepository;
+
+    @PersistenceContext
+    EntityManager em;
     
     @Autowired
     AnomalyTypeRepository anomalyTypeRepository;
@@ -82,7 +93,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return consumerDto;
     }
 
-    public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
+    /*public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
         List<ConsumerDto> pageConsumers = null;
         Long totalInConsistentCustomer;
         List<ConsumersHasSubscriptionsResponseDTO> consumersHasSubscriptionsResponseDTO = null;
@@ -90,7 +101,8 @@ public class ConsumerServiceImpl implements ConsumerService {
         //3 checks, 1 is for whole filter object, 2nd is for filter consistent and 3rd check is for filter consistent value.
         // TODO enchance logic for consumerAnomaly
         if (!Objects.isNull(pagination.getFilter()) && !Objects.isNull(pagination.getFilter().getConsistent()) && !pagination.getFilter().getConsistent()) {
-            Page<Consumer> consumerData =  consumerRepository.findByIsConsistentFalseAndConsumerStatus(PaginationUtil.getPageable(params), 0);
+           System.out.println("Into not consistent");
+            Page<Consumer> consumerData =  consumerRepository.findByIsConsistentFalse(PaginationUtil.getPageable(params));
             
             pageConsumers = consumerData
             .stream()
@@ -98,7 +110,8 @@ public class ConsumerServiceImpl implements ConsumerService {
             totalInConsistentCustomer = consumerData.getTotalElements();
             
         } else {
-            Page<Consumer> consumerData = consumerRepository.findByIsConsistentTrueAndConsumerStatus(PaginationUtil.getPageable(params), 0);
+            System.out.println("Into  consistent");
+            Page<Consumer> consumerData = consumerRepository.findByIsConsistentTrue(PaginationUtil.getPageable(params));
             
             pageConsumers = consumerData.stream().map(c -> new ConsumerDto(c, c.getAnomalies())).collect(Collectors.toList());
             totalInConsistentCustomer = consumerData.getTotalElements();
@@ -130,8 +143,82 @@ public class ConsumerServiceImpl implements ConsumerService {
         //        consumersWithCount.put("count", new PageImpl<>(pageConsumers).getTotalElements());
         consumersWithCount.put("count", totalInConsistentCustomer);
         return consumersWithCount;
+    }*/
+
+    // @Transactional(readOnly = true) // optional, recommended
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
+
+        // 1) Resolve pageable + filter (null-safe) and cap page size
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final Pageable requested    = PaginationUtil.getPageable(params);
+        final int MAX_PAGE_SIZE     = 1000;
+        final Pageable pageable     = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        final Boolean consistent = (pagination != null && pagination.getFilter() != null)
+                ? pagination.getFilter().getConsistent()
+                : null;
+
+        // 2) Page base entities (no hard-coded status)
+        final Page<Consumer> consumerPage =
+                Boolean.FALSE.equals(consistent) ? consumerRepository.findByIsConsistentFalse(pageable)
+                        : Boolean.TRUE.equals(consistent)  ? consumerRepository.findByIsConsistentTrue(pageable)
+                        : consumerRepository.findAll(pageable);
+
+        final List<Consumer> consumers = consumerPage.getContent();
+        final long total               = consumerPage.getTotalElements();
+
+        if (consumers.isEmpty()) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("data",  Collections.emptyList());
+            resp.put("count", total);
+            return resp;
+        }
+
+        // 3) BULK anomalies for this page (avoid touching c.getAnomalies())
+        final List<ConsumerAnomaly> pageAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        // Build notes map for anomalyTypeId = 1 (adjust if different)
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (ConsumerAnomaly ca : pageAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (ca.getAnomaly().getAnomalyType().getId() != NOTES_ANOMALY_TYPE_ID) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes()); // first note wins
+        }
+
+        // 4) OPTIONAL: bulk has-subscriptions (replace per-row count if you add the repo)
+        // final Set<Long> ids = consumers.stream().map(Consumer::getId).collect(Collectors.toSet());
+        // final Set<Long> withSubs = consumerSubscriptionRepository.findConsumerIdsWithAnySubscription(ids);
+
+        // 5) Map to DTOs (don’t touch lazy collections)
+        final List<ConsumersHasSubscriptionsResponseDTO> data = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerDto dto = new ConsumerDto(c, Collections.emptyList()); // avoid lazy-load of c.getAnomalies()
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
+            String notes = notesByConsumerId.get(c.getId());
+            if (notes != null) dto.setNotes(notes);
+
+            boolean hasSubs =
+                    /* withSubs != null ? withSubs.contains(c.getId()) : */
+                    consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+
+            data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("data",  data);
+        resp.put("count", total);
+        return resp;
     }
-    
+
+
     public void addConsumer(Consumer consumer) {
         consumerRepository.save(consumer);
     }
@@ -1141,7 +1228,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return null;
     }
 
-    public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+    /*public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
        System.out.println("Inside check consumer");
         Set<Consumer> consumerSet = new HashSet<>();
         
@@ -1209,8 +1296,153 @@ public class ConsumerServiceImpl implements ConsumerService {
             });
         }
         anomalyCollection.getParentAnomalyNoteSet().clear();
-    }
-    
+    }*/
+
+
+
+
+
+
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+            if (consumers == null || consumers.isEmpty()) {
+                log.info("checkConsumer start | operator={} consumers=0", serviceProvider.getName());
+                return;
+            }
+
+            long t0 = System.nanoTime();
+            log.info("checkConsumer start | operator={} consumers={}", serviceProvider.getName(), consumers.size());
+
+            // Prevent Hibernate from auto-flushing before every read query inside this tx.
+            try { em.setFlushMode(FlushModeType.COMMIT); } catch (Exception ignore) {}
+
+            // Reduce time spent waiting on locks (session scope).
+            try { em.createNativeQuery("SET SESSION innodb_lock_wait_timeout = 5").executeUpdate(); } catch (Exception ignore) {}
+
+            // Precompute once (was cheap but do it outside the loop anyway)
+            int existingCountForSp = consumerRepository.countByServiceProvider_Id(serviceProvider.getId());
+
+            // Duplicate detection on msisdn (your equals/hashCode are msisdn-based, but make it explicit + null-safe)
+            Set<String> seenMsisdn = new HashSet<>(consumers.size() * 2);
+
+            // For “Exceeding” anomaly counting key
+            Map<ExceedingConsumers, Integer> exceedMap = new HashMap<>();
+
+            // Buffer writes in batches to avoid per-row I/O
+            final int batchSize = 500; // keep <= hibernate.jdbc.batch_size
+            List<Consumer> pendingSaves = new ArrayList<>(batchSize);
+
+            // Optional helper your code uses
+            AnomalyCollection anomalyCollection = new AnomalyCollection();
+
+            int processed = 0;
+            for (Consumer consumer : consumers) {
+                long startOne = System.nanoTime();
+                try {
+                    // -------- Incomplete anomaly check --------
+                    consumer.setIsConsistent(Boolean.TRUE);
+                    List<String> errors = checkNullAttributesForFile(consumer); // your existing helper
+
+                    if (!errors.isEmpty()) {
+                        try {
+                            checkConsumerIncompleteAnomaly(consumer, errors, user, existingCountForSp != 0, anomalyCollection);
+                        } catch (Exception e) {
+                            log.warn("incomplete-anomaly failed msisdn={}", safeMsisdn(consumer), e);
+                        }
+                    } else {
+                        if (existingCountForSp != 0) {
+                            try { resolveIncompleteAnomaly(consumer, user); } catch (Exception e) { log.warn("resolveIncomplete failed msisdn={}", safeMsisdn(consumer), e); }
+                            try { softDeleteConsistentUsers(consumer); }   catch (Exception e) { log.warn("softDeleteConsistent failed msisdn={}", safeMsisdn(consumer), e); }
+                        }
+                        pendingSaves.add(consumer);
+                    }
+
+                    // -------- Duplicate anomaly check (by msisdn) --------
+                    String keyMsisdn = normalize(consumer.getMsisdn());
+                    if (!seenMsisdn.add(keyMsisdn)) {
+                        try { tagDuplicateAnomalies(consumer, user); } catch (Exception e) { log.warn("duplicate-anomaly failed msisdn={}", keyMsisdn, e); }
+                    } else {
+                        try {
+                            Consumer updated = resolvedAndSoftDeleteConsumers(consumer, existingCountForSp != 0, user);
+                            pendingSaves.add(updated);
+                        } catch (Exception e) {
+                            log.warn("resolve-old-anomalies failed msisdn={}", keyMsisdn, e);
+                        }
+                    }
+
+                    // -------- Exceeding anomaly check --------
+                    ExceedingConsumers exKey = new ExceedingConsumers();
+                    exKey.setServiceProviderName(serviceProvider.getName());
+                    exKey.setIdentificationType(Optional.ofNullable(consumer.getIdentificationType()).orElse(""));
+                    exKey.setIdentificationNumber(Optional.ofNullable(consumer.getIdentificationNumber()).orElse(""));
+                    int newCnt = exceedMap.merge(exKey, 1, Integer::sum);
+                    if (newCnt < 3) {
+                        try {
+                            Consumer updated = resolvedAndDeleteExceedingConsumers(consumer, existingCountForSp != 0, user);
+                            pendingSaves.add(updated);
+                        } catch (Exception e) {
+                            log.warn("resolve-exceeding failed msisdn={}", keyMsisdn, e);
+                        }
+                    } else if (newCnt == 3) { // first time crossing the threshold
+                        try { tagExceedingAnomalies(consumer, user); } catch (Exception e) { log.warn("exceeding-anomaly failed msisdn={}", keyMsisdn, e); }
+                    }
+
+                    // -------- Batch flush/clear --------
+                    processed++;
+                    if (pendingSaves.size() >= batchSize) {
+                        consumerRepository.saveAllAndFlush(pendingSaves);
+                        pendingSaves.clear();
+                        em.clear();
+                    }
+
+                    if (processed % 200 == 0) {
+                        long ms = (System.nanoTime() - t0) / 1_000_000;
+                        log.info("checkConsumer progress | processed={} elapsedMs={}", processed, ms);
+                    }
+                } catch (Exception ex) {
+                    log.error("checkConsumer error msisdn={} sp={} ", safeMsisdn(consumer), serviceProvider.getName(), ex);
+                } finally {
+                    long durMs = (System.nanoTime() - startOne) / 1_000_000;
+                    if (durMs > 1000) {
+                        log.warn("slow record msisdn={} took {} ms", safeMsisdn(consumer), durMs);
+                    }
+                }
+            }
+
+            // Final flush
+            if (!pendingSaves.isEmpty()) {
+                consumerRepository.saveAllAndFlush(pendingSaves);
+                pendingSaves.clear();
+                em.clear();
+            }
+
+            anomalyCollection.getParentAnomalyNoteSet().clear();
+
+            long totalMs = (System.nanoTime() - t0) / 1_000_000;
+            log.info("checkConsumer done | operator={} processed={} in {} ms", serviceProvider.getName(), processed, totalMs);
+        }
+
+        // ======== helpers (same assumptions as your code) ========
+
+        private String safeMsisdn(Consumer c) {
+            return c == null ? "null" : String.valueOf(c.getMsisdn());
+        }
+        private String normalize(String s) { return s == null ? "" : s.trim(); }
+
+        // Your existing methods referenced here must remain:
+        // - List<String> checkNullAttributesForFile(Consumer c)
+        // - void checkConsumerIncompleteAnomaly(Consumer c, List<String> errors, User user, boolean hasExisting, AnomalyCollection ac)
+        // - void resolveIncompleteAnomaly(Consumer c, User user)
+        // - void softDeleteConsistentUsers(Consumer c)
+        // - Consumer resolvedAndSoftDeleteConsumers(Consumer c, boolean hasExisting, User user)
+        // - void tagDuplicateAnomalies(Consumer c, User user)
+        // - Consumer resolvedAndDeleteExceedingConsumers(Consumer c, boolean hasExisting, User user)
+        // - void tagExceedingAnomalies(Consumer c, User user)
+
+
+
+
+
     private void checkConsumerIncompleteAnomaly(Consumer consumer, List<String> errors, User user, Boolean flag,AnomalyCollection collection) {
         
         Set<String> setForDefaultErrors = new HashSet<>();
