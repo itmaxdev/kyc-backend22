@@ -325,7 +325,11 @@ public class FileProcessingService {
 
         // Kick off checkConsumer WITHOUT blocking the scheduler thread
         if (success) {
+            log.info("successs: processed={}");
             runCheckConsumerAsync(sp);
+        }else{
+            log.info("Failure: processed={}");
+
         }
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
@@ -486,6 +490,7 @@ public class FileProcessingService {
     /* ================= Post-check (async) ================= */
 
     private void runCheckConsumerAsync(ServiceProvider sp) {
+        log.info("checkConsumer already to use");
         Long spId = sp.getId();
         if (!RUNNING_CHECKS.add(spId)) {
             log.info("checkConsumer already running for operator {}, skipping", sp.getName());
@@ -675,11 +680,14 @@ public class FileProcessingService {
     }
 
     private RowData mapRowOrange(String[] f, Long spId, Timestamp nowTs) {
+        Date date = new Date();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
         RowData r = new RowData();
         r.msisdn              = idx(f, 0);
-        r.registrationDateStr = idx(f, 1); // keep as String
-        r.firstName           = idx(f, 2);
-        r.middleName          = idx(f, 3);
+        r.registrationDateStr = rgnNumber; // keep as String
+        //r.firstName           = idx(f, 2);
+        r.firstName          = idx(f, 3);
         r.lastName            = idx(f, 6);
         r.gender              = idx(f, 4);
         r.address             = idx(f, 5);;
