@@ -7,6 +7,7 @@ import com.app.kyc.entity.User;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -650,8 +652,12 @@ public class FileProcessingService {
 
 
     private RowData mapRowAirtel(String[] f, Long spId, Timestamp nowTs) {
+        Date date = new Date();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
         RowData r = new RowData();
         r.msisdn              = idx(f, 1);
+        r.registrationDateStr =  rgnNumber;
         r.firstName           = idx(f, 2);
         r.middleName          = idx(f, 3);
         r.lastName            = idx(f, 4);
