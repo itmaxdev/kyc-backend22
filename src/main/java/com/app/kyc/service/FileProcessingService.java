@@ -290,7 +290,7 @@ public class FileProcessingService {
             log.info("Detected CSV separator: '{}'", sep == '\t' ? "\\t" : String.valueOf(sep));
 
             // Do the actual ingestion inside a short transaction
-            totalProcessed = ingestFileTxVodacom(workingCopy, spId, sep, cs);
+            totalProcessed = ingestFileTxOrange(workingCopy, spId, sep, cs);
             success = true;
 
             fileLog.setRecordsProcessed(totalProcessed);
@@ -680,15 +680,9 @@ public class FileProcessingService {
         r.registrationDateStr = idx(f, 1); // keep as String
         r.firstName           = idx(f, 2);
         r.middleName          = idx(f, 3);
-        r.lastName            = idx(f, 4);
-        r.gender              = idx(f, 5);
-        r.birthDateStr        = idx(f, 6);
-        r.birthPlace          = idx(f, 7);
-        r.address             = join(" ", idx(f,8), idx(f,9), idx(f,10), idx(f,11), idx(f,12));
-        r.alt1                = idx(f,13);
-        r.alt2                = idx(f,14);
-        r.idType              = idx(f,15);
-        r.idNumber            = idx(f,16);
+        r.lastName            = idx(f, 6);
+        r.gender              = idx(f, 4);
+        r.address             = idx(f, 5);;
         r.createdOnTs         = nowTs;
         r.serviceProviderId   = spId;
         return r;
