@@ -16,6 +16,8 @@ import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
 import org.apache.poi.xssf.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.app.kyc.entity.Anomaly;
@@ -91,16 +93,16 @@ public class ConsumerServiceImpl implements ConsumerService {
         return consumerDto;
     }
 
-    public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
+    /*public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
         List<ConsumerDto> pageConsumers = null;
         Long totalInConsistentCustomer;
         List<ConsumersHasSubscriptionsResponseDTO> consumersHasSubscriptionsResponseDTO = null;
         Pagination pagination = PaginationUtil.getFilterObject(params);
         //3 checks, 1 is for whole filter object, 2nd is for filter consistent and 3rd check is for filter consistent value.
         // TODO enchance logic for consumerAnomaly
-        if (!Objects.isNull(pagination.getFilter()) && !Objects.isNull(pagination.getFilter().getConsistent())) {
-            System.out.println("test outcome here with out consistent");
-            Page<Consumer> consumerData =  consumerRepository.findByIsConsistentFalse(PaginationUtil.getPageable(params), 0);
+        if (!Objects.isNull(pagination.getFilter()) && !Objects.isNull(pagination.getFilter().getConsistent()) && !pagination.getFilter().getConsistent()) {
+           System.out.println("Into not consistent");
+            Page<Consumer> consumerData =  consumerRepository.findByIsConsistentFalse(PaginationUtil.getPageable(params));
             
             pageConsumers = consumerData
             .stream()
@@ -108,12 +110,11 @@ public class ConsumerServiceImpl implements ConsumerService {
             totalInConsistentCustomer = consumerData.getTotalElements();
             
         } else {
-        System.out.println("test outcome here with consistent ");
-            Page<Consumer> consumerData = consumerRepository.findByIsConsistentTrue(PaginationUtil.getPageable(params), 0);
+            System.out.println("Into  consistent");
+            Page<Consumer> consumerData = consumerRepository.findByIsConsistentTrue(PaginationUtil.getPageable(params));
             
             pageConsumers = consumerData.stream().map(c -> new ConsumerDto(c, c.getAnomalies())).collect(Collectors.toList());
             totalInConsistentCustomer = consumerData.getTotalElements();
-        System.out.println("test outcome here "+totalInConsistentCustomer.toString());
         }
         pageConsumers.forEach(consumerDto -> {
             if(Objects.isNull(consumerDto.getLastName()))
@@ -142,8 +143,82 @@ public class ConsumerServiceImpl implements ConsumerService {
         //        consumersWithCount.put("count", new PageImpl<>(pageConsumers).getTotalElements());
         consumersWithCount.put("count", totalInConsistentCustomer);
         return consumersWithCount;
+    }*/
+
+    // @Transactional(readOnly = true) // optional, recommended
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
+
+        // 1) Resolve pageable + filter (null-safe) and cap page size
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final Pageable requested    = PaginationUtil.getPageable(params);
+        final int MAX_PAGE_SIZE     = 1000;
+        final Pageable pageable     = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        final Boolean consistent = (pagination != null && pagination.getFilter() != null)
+                ? pagination.getFilter().getConsistent()
+                : null;
+
+        // 2) Page base entities (no hard-coded status)
+        final Page<Consumer> consumerPage =
+                Boolean.FALSE.equals(consistent) ? consumerRepository.findByIsConsistentFalse(pageable)
+                        : Boolean.TRUE.equals(consistent)  ? consumerRepository.findByIsConsistentTrue(pageable)
+                        : consumerRepository.findAll(pageable);
+
+        final List<Consumer> consumers = consumerPage.getContent();
+        final long total               = consumerPage.getTotalElements();
+
+        if (consumers.isEmpty()) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("data",  Collections.emptyList());
+            resp.put("count", total);
+            return resp;
+        }
+
+        // 3) BULK anomalies for this page (avoid touching c.getAnomalies())
+        final List<ConsumerAnomaly> pageAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        // Build notes map for anomalyTypeId = 1 (adjust if different)
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (ConsumerAnomaly ca : pageAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (ca.getAnomaly().getAnomalyType().getId() != NOTES_ANOMALY_TYPE_ID) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes()); // first note wins
+        }
+
+        // 4) OPTIONAL: bulk has-subscriptions (replace per-row count if you add the repo)
+        // final Set<Long> ids = consumers.stream().map(Consumer::getId).collect(Collectors.toSet());
+        // final Set<Long> withSubs = consumerSubscriptionRepository.findConsumerIdsWithAnySubscription(ids);
+
+        // 5) Map to DTOs (don’t touch lazy collections)
+        final List<ConsumersHasSubscriptionsResponseDTO> data = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerDto dto = new ConsumerDto(c, Collections.emptyList()); // avoid lazy-load of c.getAnomalies()
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
+            String notes = notesByConsumerId.get(c.getId());
+            if (notes != null) dto.setNotes(notes);
+
+            boolean hasSubs =
+                    /* withSubs != null ? withSubs.contains(c.getId()) : */
+                    consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+
+            data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("data",  data);
+        resp.put("count", total);
+        return resp;
     }
-    
+
+
     public void addConsumer(Consumer consumer) {
         consumerRepository.save(consumer);
     }

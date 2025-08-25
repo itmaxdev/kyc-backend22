@@ -82,8 +82,16 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     Page<Consumer> findByIsConsistentFalseAndConsumerStatusAndServiceProvider_Id(Pageable pageable, int consumerStatus, Long id);
     Page<Consumer> findByIsConsistentTrueAndConsumerStatusAndServiceProvider_Id(Pageable pageable, int consumerStatus, Long Id);
 
-    Page<Consumer> findByIsConsistentTrueAndConsumerStatus(Pageable pageable, int consumerStatus);
-    Page<Consumer> findByIsConsistentFalseAndConsumerStatus(Pageable pageable, int consumerStatus);
+
+
+
+    Page<Consumer> findAll(Pageable pageable);
+    Page<Consumer> findByIsConsistentTrue(Pageable pageable);
+    Page<Consumer> findByIsConsistentFalse(Pageable pageable);
+
+    long countByIsConsistentTrue();
+    long countByIsConsistentFalse();
+
 
     @Transactional
     void deleteByServiceProvider(ServiceProvider serviceProvider);
@@ -220,12 +228,4 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
 
     /** Quick existence check by business key. */
     boolean existsByMsisdn(String msisdn);
-
-    Page<Consumer> findAll(Pageable pageable);
-    // BAD
-    @Query("select c from Consumer c where c.isConsistent = true")
-    Page<Consumer> findByIsConsistentTrue(Pageable p, @Param("status") int status);
-
-    Page<Consumer> findByIsConsistentFalse(Pageable p, @Param("status") int status);
-
 }
